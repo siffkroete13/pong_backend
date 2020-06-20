@@ -1,58 +1,75 @@
 const PORT = 8888;
+const webSocketsServerPort = PORT;
 const http = require('http');
 const app = require('./app');
 const server = http.createServer(app);
+const util = require('./utils/util');
 
+
+
+
+/*
 server.listen(PORT, () => {
     console.log(`Listening on ===> ${PORT}}`);
 });
-
+*/
 
 
 // Web-Socket-Server ------------------------------------------------
 // Das Tool das hier verwendet wird heisst: "WebSocket-Node"
-// ws oder sock.js wäre auch möglich denke ich 
-const webSocketsServerPort = PORT;
+// ws oder sock.js wäre auch möglich denke ich. 
+// Und natürlich io-sockets wäre das Beste aber eventuel etwas langsamer, dafür mit fallback.
+
+
+server.listen(webSocketsServerPort, () => {
+    console.log(`Websocket listening on ===> ${webSocketsServerPort}}`);
+});
+
+// Spinning the http server and the websocket server. Kann man vielleicht verschiedene Ports benutzen?
+// Weiss nicht
 const webSocketServer = require('websocket').server;
-const http = require('http');
-// Spinning the http server and the websocket server.
-const server = http.createServer();
-server.listen(webSocketsServerPort);
 const wsServer = new webSocketServer({
   httpServer: server
 });
 
-wsServer.on('request', function(request) {
-    var userID = getUniqueID();
-    console.log((new Date()) + ' Recieved a new connection from origin ' + request.origin + '.');
-    // You can rewrite this part of the code to accept only the requests from allowed origin
-    const connection = request.accept(null, request.origin);
-    clients[userID] = connection;
-    console.log('connected: ' + userID + ' in ' + Object.getOwnPropertyNames(clients));
-    connection.on('message', function(message) {
-      if (message.type === 'utf8') {
-        const dataFromClient = JSON.parse(message.utf8Data);
-        const json = { type: dataFromClient.type };
-        if (dataFromClient.type === typesDef.USER_EVENT) {
-          users[userID] = dataFromClient;
-          userActivity.push(`${dataFromClient.username} joined to edit the document`);
-          json.data = { users, userActivity };
-        } else if (dataFromClient.type === typesDef.CONTENT_CHANGE) {
-          editorContent = dataFromClient.content;
-          json.data = { editorContent, userActivity };
-        }
-        sendMessage(JSON.stringify(json));
-      }
-    });
-    // user disconnected
-    connection.on('close', function(connection) {
-      console.log((new Date()) + " Peer " + userID + " disconnected.");
-      const json = { type: typesDef.USER_EVENT };
-      userActivity.push(`${users[userID].username} left the document`);
-      json.data = { users, userActivity };
-      delete clients[userID];
-      delete users[userID];
-      sendMessage(JSON.stringify(json));
-    });
+
+const connections = new Array();
+
+const allowedOrigin = ['http://localhost:3000'];
+
+function originIsAllowed(_origin) {
+    return util.in_array(_origin, allowedOrigin);
+}
+
+
+wsServer.on('connect', (e) => {
+    console.log('connect aufgerufen');
 });
+
+
+wsServer.on('request', (request) => {
+    if (!originIsAllowed(request.origin)) {
+        // Make sure we only accept requests from an allowed origin
+        request.reject();
+        console.log((new Date()) + ' Connection from origin ' + request.origin + ' rejected.')
+        return;
+    }
+    var connection = request.accept(null, request.origin)
+    connections.push(connection);
+    connection.on('message', (message) => {
+        if (message.type === 'utf8') {
+            console.log('Received Message: ' + message.utf8Data);
+            connection.sendUTF(message.utf8Data);
+        } else if (message.type === 'binary') {
+            console.log('Received Binary Message of ' + message.binaryData.length + ' bytes')
+            connection.sendBytes(message.binaryData);
+        }
+    });
+    connection.on('close', (reasonCode, description) => {
+        const index = connections.indexOf(this)
+        connections.splice(index, 1);
+        console.log(' Peer ' + connection.remoteAddress + ' disconnected, description: ', description);
+    })
+});
+
 // End Web-Socket-Server --------------------------------------------
