@@ -2,11 +2,9 @@ const PORT = 8888;
 const webSocketsServerPort = PORT;
 const http = require('http');
 const app = require('./app');
-const server = http.createServer(app);
+// const server = http.createServer(app);
+const server = http.createServer();
 const util = require('./utils/util');
-
-
-
 
 /*
 server.listen(PORT, () => {
@@ -14,16 +12,17 @@ server.listen(PORT, () => {
 });
 */
 
-
-// Web-Socket-Server ------------------------------------------------
-// Das Tool das hier verwendet wird heisst: "WebSocket-Node"
-// ws oder sock.js wäre auch möglich denke ich. 
-// Und natürlich io-sockets wäre das Beste aber eventuel etwas langsamer, dafür mit fallback.
-
-
 server.listen(webSocketsServerPort, () => {
     console.log(`Websocket listening on ===> ${webSocketsServerPort}}`);
 });
+
+
+
+
+// Web-Socket-Server ------------------------------------------------------------------------------------
+// Das Tool das hier verwendet wird heisst: "WebSocket-Node"
+// ws oder sock.js wäre auch möglich denke ich. 
+// Und natürlich io-sockets wäre das Beste aber eventuel etwas langsamer, dafür mit fallback.
 
 // Spinning the http server and the websocket server. Kann man vielleicht verschiedene Ports benutzen?
 // Weiss nicht
@@ -34,9 +33,9 @@ const wsServer = new webSocketServer({
 
 
 const connections = new Array();
-
+const user_names = ['',''];
+    
 const allowedOrigin = ['http://localhost:3000'];
-
 function originIsAllowed(_origin) {
     return util.in_array(_origin, allowedOrigin);
 }
@@ -48,23 +47,42 @@ wsServer.on('connect', (e) => {
 
 
 wsServer.on('request', (request) => {
-    if (!originIsAllowed(request.origin)) {
-        // Make sure we only accept requests from an allowed origin
+    if(!originIsAllowed(request.origin) // Ist origin nicht erlaubt?
+    || connections.length >= 2) { // Sind es zu viele Mitspieler?
+        // Dann Verbindung ablehnen.
         request.reject();
         console.log((new Date()) + ' Connection from origin ' + request.origin + ' rejected.')
         return;
-    }
-    var connection = request.accept(null, request.origin)
-    connections.push(connection);
+    } 
+    
+    const connection = request.accept(null, request.origin);
+    // Index vom Spiler der diese Nachricht geschickt hat
+    const user_index = connections.push(connection) - 1;
+     // Index vom anderen Spieler
+    const other_user_index = user_index === 0 ? 1 : 0; 
+    
+    console.log('Verbunden! Spieler index: ', user_index);
+    console.log('Verbunden! Der andere Spieler hat index: ', other_user_index);
+
     connection.on('message', (message) => {
-        if (message.type === 'utf8') {
-            console.log('Received Message: ' + message.utf8Data);
-            connection.sendUTF(message.utf8Data);
+        if(message.type === 'utf8') {
+            const data = JSON.parse(message.utf8Data);
+            const user_name = data.payload.name;
+            console.log('message ===> user_index: '+user_index+', utf8 message: data: ', data,
+            'user_name: '+user_name);
+
+            if(user_names[user_index] === '') user_names[user_index] = user_name;
+            console.log('message ===> my user_index: '+user_index+', user names: ', user_names);
         } else if (message.type === 'binary') {
-            console.log('Received Binary Message of ' + message.binaryData.length + ' bytes')
-            connection.sendBytes(message.binaryData);
+            console.log('Received Binary Message of ' + message.binaryData.length + ' bytes');
+            if(connections.length < 2) return; // Spiel kann erst beginnen wenn alle Spieler (hier 2) angemeldet sind
+            
+           
+            // Index vom einen Spieler an den anderen weiter leiten
+            connections[destIndex].sendBytes(message.binaryData);
         }
     });
+
     connection.on('close', (reasonCode, description) => {
         const index = connections.indexOf(this)
         connections.splice(index, 1);
@@ -72,4 +90,4 @@ wsServer.on('request', (request) => {
     })
 });
 
-// End Web-Socket-Server --------------------------------------------
+// End Web-Socket-Server --------------------------------------------------------------------------------
