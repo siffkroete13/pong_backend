@@ -2,10 +2,10 @@ const PORT = 8888;
 const webSocketsServerPort = PORT;
 const http = require('http');
 const app = require('./app');
-// const server = http.createServer(app);
+// const server = http.createServer(app); 
+// var io = require('socket.io')(http); // vielleicht sollte man vorcher das machen: var http = require('http').Server(app);
 const server = http.createServer();
-const util = require('./utils/util');
-
+const MyWebSocketNode = require('./MyWebsocketNode');
 /*
 server.listen(PORT, () => {
     console.log(`Listening on ===> ${PORT}}`);
@@ -16,78 +16,67 @@ server.listen(webSocketsServerPort, () => {
     console.log(`Websocket listening on ===> ${webSocketsServerPort}}`);
 });
 
-
-
-
 // Web-Socket-Server ------------------------------------------------------------------------------------
 // Das Tool das hier verwendet wird heisst: "WebSocket-Node"
 // ws oder sock.js wäre auch möglich denke ich. 
 // Und natürlich io-sockets wäre das Beste aber eventuel etwas langsamer, dafür mit fallback.
-
-// Spinning the http server and the websocket server. Kann man vielleicht verschiedene Ports benutzen?
-// Weiss nicht
-const webSocketServer = require('websocket').server;
-const wsServer = new webSocketServer({
-  httpServer: server
-});
+const WebsocketNode = new MyWebSocketNode(server).start(); // Hiermit startet der Websocket-Server und hört auf messages
+// End Web-Socket-Server --------------------------------------------------------------------------------
 
 
-const connections = new Array();
-const user_names = ['',''];
-    
-const allowedOrigin = ['http://localhost:3000'];
-function originIsAllowed(_origin) {
-    return util.in_array(_origin, allowedOrigin);
-}
 
 
-wsServer.on('connect', (e) => {
-    console.log('connect aufgerufen');
-});
+/*
+// IO-Section###############################################################################
+const MAX_PEERS_IN_ROOM = 2;
+const NAMESPACE_OF_THIS_SOCKET = '/'; // Hier nehmen wir einfach den default-namespac
+var peersInRoom = 0;
+var room = '';
+io.on('connection', function(socket) {
+    socket.emit('setUser', peerUser);
 
+    socket.on('chatMessage', function(data) {
+        console.log("chat message: ", data);
+        // Nachricht weiterleiten an alle in diesem Room ausser dem Sender (logisch)
+        socket.to(room).emit('chatMessage', data);
+    });
 
-wsServer.on('request', (request) => {
-    if(!originIsAllowed(request.origin) // Ist origin nicht erlaubt?
-    || connections.length >= 2) { // Sind es zu viele Mitspieler?
-        // Dann Verbindung ablehnen.
-        request.reject();
-        console.log((new Date()) + ' Connection from origin ' + request.origin + ' rejected.')
-        return;
-    } 
-    
-    const connection = request.accept(null, request.origin);
-    // Index vom Spiler der diese Nachricht geschickt hat
-    const user_index = connections.push(connection) - 1;
-     // Index vom anderen Spieler
-    const other_user_index = user_index === 0 ? 1 : 0; 
-    
-    console.log('Verbunden! Spieler index: ', user_index);
-    console.log('Verbunden! Der andere Spieler hat index: ', other_user_index);
+    socket.on('createOrJoinRoom', function(_room) {
+        room = _room;
+         // Anzahl Peers im Raum ermitteln
+        if(io.nsps[NAMESPACE_OF_THIS_SOCKET].adapter.rooms[room]) {
+            peersInRoom = io.nsps[NAMESPACE_OF_THIS_SOCKET].adapter.rooms[room].length;
+        } else {
+            peersInRoom = 0;
+        }
 
-    connection.on('message', (message) => {
-        if(message.type === 'utf8') {
-            const data = JSON.parse(message.utf8Data);
-            const user_name = data.payload.name;
-            console.log('message ===> user_index: '+user_index+', utf8 message: data: ', data,
-            'user_name: '+user_name);
-
-            if(user_names[user_index] === '') user_names[user_index] = user_name;
-            console.log('message ===> my user_index: '+user_index+', user names: ', user_names);
-        } else if (message.type === 'binary') {
-            console.log('Received Binary Message of ' + message.binaryData.length + ' bytes');
-            if(connections.length < 2) return; // Spiel kann erst beginnen wenn alle Spieler (hier 2) angemeldet sind
-            
-           
-            // Index vom einen Spieler an den anderen weiter leiten
-            connections[destIndex].sendBytes(message.binaryData);
+        if(peersInRoom === MAX_PEERS_IN_ROOM) {
+            socket.emit('message', 'Raum ist voll!' + parseInt(peersInRoom + 1), room);
+            return;
+        }
+        
+        if(peersInRoom === 0) {
+            // Peer informieren, dass er den Room als erstes betreten bzw. erstellt hat
+            socket.join(room);
+            peersInRoom++;
+            socket.emit('roomCreated', room);
+            console.log('peersInRoom: ' + peersInRoom);
+        } else if(peersInRoom === 1) {
+            io.sockets.in(room).emit('join', room);
+            socket.join(room);
+            peersInRoom++;
+            socket.emit('joined', room);
+            console.log('peersInRoom: ' + peersInRoom);
         }
     });
 
-    connection.on('close', (reasonCode, description) => {
-        const index = connections.indexOf(this)
-        connections.splice(index, 1);
-        console.log(' Peer ' + connection.remoteAddress + ' disconnected, description: ', description);
-    })
-});
+    socket.on('message', function(msg) {
+        console.log('socket.on(messsage) : ', msg);
+    });
 
-// End Web-Socket-Server --------------------------------------------------------------------------------
+    socket.on('broadcast', function(data) {
+        console.log('Broadcast-Nachricht von Server aufgefangen');
+    });
+});
+// End IO-Section###########################################################################
+*/
