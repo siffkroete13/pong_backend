@@ -14,10 +14,12 @@ let myUtil = (function() {
       return lets;
   }
 
-  MyUtil.prototype.findGetParameter = function(parameterName) {
-      let result = null,
-          tmp = [];
-      let items = location.search.substr(1).split("&");
+  MyUtil.prototype.findGetParameter = function(parameterName, url = '') {
+      if(!url && location && location.search) url = location.search
+      else return null;
+      
+      let result = null, tmp = [];
+      let items = url.substr(1).split("&");
       for (let index = 0; index < items.length; index++) {
           tmp = items[index].split("=");
           if (tmp[0] === parameterName) result = decodeURIComponent(tmp[1]);
